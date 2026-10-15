@@ -1,7 +1,7 @@
 import pytest
 
 from engine.core import (Interval, firing_intervals, fmt_duration, parse_duration,
-                         score_incident)
+                         relevant_faults, score_incident)
 
 STEP = 15
 
@@ -64,3 +64,22 @@ def test_fmt_duration():
     assert fmt_duration(220) == "3m40s"
     assert fmt_duration(45) == "45s"
     assert fmt_duration(None) == "-"
+
+
+FAULTS = [{"id": "e", "type": "errors"}, {"id": "l", "type": "latency"}]
+
+
+def test_rule_without_annotation_is_scored_against_every_fault():
+    assert relevant_faults({"alert": "A"}, FAULTS) == FAULTS
+
+
+def test_backtest_detects_filters_by_type():
+    rule = {"alert": "A", "annotations": {"backtest_detects": "latency"}}
+    assert [f["id"] for f in relevant_faults(rule, FAULTS)] == ["l"]
+    rule["annotations"]["backtest_detects"] = "errors, latency"
+    assert relevant_faults(rule, FAULTS) == FAULTS
+
+
+def test_backtest_detects_rejects_typos():
+    with pytest.raises(ValueError, match="laterncy"):
+        relevant_faults({"alert": "A", "annotations": {"backtest_detects": "laterncy"}}, FAULTS)
