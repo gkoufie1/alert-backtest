@@ -1,0 +1,11 @@
+{
+  "id": "20260901-060000-latency-600ms",
+  "type": "latency",
+  "params": {
+    "latency_ms": 600.0
+  },
+  "start": 1756706404.2,
+  "end": 1756706704.2,
+  "status": "complete",
+  "synthetic": true
+}

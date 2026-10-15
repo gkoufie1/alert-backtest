@@ -1,4 +1,4 @@
-.PHONY: up down nuke venv test errors latency baseline capture backtest replay
+.PHONY: up down nuke venv test errors latency baseline capture backtest replay demo
 
 PY ?= python3
 
@@ -34,3 +34,6 @@ backtest:    ## replay rules/alerts.yaml against every recorded incident
 
 replay:      ## same backtest, replayed from the Parquet library (no live Prometheus needed)
 	$(PY) -m engine.backtest --source replay
+
+demo:        ## backtest against the committed sample library in examples/incidents (Docker only)
+	$(PY) -m engine.backtest --source replay --incidents examples/incidents

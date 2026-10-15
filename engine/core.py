@@ -65,6 +65,25 @@ def score_incident(intervals: list[Interval], start: float, end: float, grace_s:
     return Detection(False, None)
 
 
+FAULT_TYPES = {"errors", "latency"}  # matches tools/inject.py --type, minus 'none'
+
+
+def relevant_faults(rule: dict, faults: list[dict]) -> list[dict]:
+    """Faults a rule is meant to catch, from its `backtest_detects` annotation, a
+    comma-separated list of incident types. Rules without it are scored against
+    every fault. An annotation rather than a label, so it stays out of alert identity
+    and Alertmanager routing."""
+    wanted = (rule.get("annotations") or {}).get("backtest_detects")
+    if not wanted:
+        return faults
+    types = {t.strip() for t in wanted.split(",") if t.strip()}
+    unknown = types - FAULT_TYPES
+    if unknown:
+        raise ValueError(f"{rule.get('alert')}: unknown backtest_detects type(s) {sorted(unknown)}, "
+                         f"expected some of {sorted(FAULT_TYPES)}")
+    return [f for f in faults if f["type"] in types]
+
+
 def fmt_duration(seconds: float | None) -> str:
     if seconds is None:
         return "-"

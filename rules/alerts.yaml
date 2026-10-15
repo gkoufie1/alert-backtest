@@ -10,6 +10,8 @@ groups:
         for: 2m
         labels:
           severity: page
+        annotations:
+          backtest_detects: errors   # which incident types the backtest scores it against
 
       - alert: OrdersHighLatencyP99
         expr: |
@@ -19,3 +21,5 @@ groups:
         for: 3m
         labels:
           severity: page
+        annotations:
+          backtest_detects: latency
