@@ -7,7 +7,6 @@ on:
 
 permissions:
   contents: read
-  pull-requests: write
 
 env:
   LIBRARY: examples/incidents
@@ -16,12 +15,16 @@ env:
 jobs:
   backtest:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write  # the backtest comment
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           fetch-depth: 0  # the base branch's rules are read with git show
+          persist-credentials: false
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
         with:
           python-version: "3.12"
           cache: pip
@@ -38,13 +41,15 @@ jobs:
 
       - name: Backtest base branch rules
         if: github.event_name == 'pull_request'
+        env:
+          BASE_REF: ${{ github.base_ref }}  # via env, never interpolated into the script
         run: |
-          if git show "origin/${{ github.base_ref }}:rules/alerts.yaml" > "$RUNNER_TEMP/base-rules.yaml"; then
+          if git show "origin/$BASE_REF:rules/alerts.yaml" > "$RUNNER_TEMP/base-rules.yaml"; then
             python -m engine.backtest --source replay --incidents "$LIBRARY" \
               --rules "$RUNNER_TEMP/base-rules.yaml" \
               --report "$RUNNER_TEMP/base.md" --json "$RUNNER_TEMP/base.json"
           else
-            echo "No rules/alerts.yaml on ${{ github.base_ref }}, nothing to compare against."
+            echo "No rules/alerts.yaml on $BASE_REF, nothing to compare against."
           fi
 
       - name: Backtest this commit's rules
@@ -67,6 +72,8 @@ jobs:
           hashFiles('reports/backtest.md') != ''
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
-          gh pr comment "${{ github.event.pull_request.number }}" \
+          gh pr comment "$PR_NUMBER" \
             --body-file "$RUNNER_TEMP/comment.md" --edit-last --create-if-none
