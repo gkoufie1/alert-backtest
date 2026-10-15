@@ -13,7 +13,7 @@ import yaml
 
 from engine.core import (firing_intervals, fmt_duration, median_or_none,
                          parse_duration, score_incident)
-from engine.sources import PrometheusSource
+from engine.sources import PrometheusSource, ReplaySource
 
 
 def load_rules(path: str) -> list[dict]:
@@ -34,26 +34,7 @@ def describe(inc: dict) -> str:
     return "baseline"
 
 
-def main() -> int:
-    p = argparse.ArgumentParser()
-    p.add_argument("--rules", default="rules/alerts.yaml")
-    p.add_argument("--incidents", default="incidents")
-    p.add_argument("--prometheus", default="http://localhost:9090")
-    p.add_argument("--step", type=int, default=15, help="must match evaluation_interval")
-    p.add_argument("--pre", type=int, default=600, help="seconds evaluated before incident start")
-    p.add_argument("--grace", type=int, default=300, help="seconds after end still counted as a detection")
-    p.add_argument("--report", default="reports/backtest.md")
-    p.add_argument("--fail-on-miss", action="store_true", help="exit 1 if any fault goes undetected (for CI)")
-    args = p.parse_args()
-
-    rules, incidents = load_rules(args.rules), load_incidents(args.incidents)
-    faults = [i for i in incidents if i["type"] != "none"]
-    baselines = [i for i in incidents if i["type"] == "none"]
-    if not incidents:
-        print("No completed incidents found. Run tools/inject.py first.")
-        return 1
-
-    source = PrometheusSource(args.prometheus)
+def backtest_rules(source, rules: list[dict], faults: list[dict], baselines: list[dict], args):
     summary, any_miss = [], False
 
     for rule in rules:
@@ -89,6 +70,41 @@ def main() -> int:
             "median_ttd": fmt_duration(median_or_none(ttds)),
             "false_per_hour": f"{false_fires / baseline_hours:.2f}" if baseline_hours else "n/a",
         })
+    return summary, any_miss
+
+
+def main() -> int:
+    p = argparse.ArgumentParser()
+    p.add_argument("--rules", default="rules/alerts.yaml")
+    p.add_argument("--incidents", default="incidents")
+    p.add_argument("--prometheus", default="http://localhost:9090")
+    p.add_argument("--source", choices=["prometheus", "replay"], default="prometheus",
+                   help="live Prometheus, or replay the Parquet library in a throwaway one")
+    p.add_argument("--step", type=int, default=15, help="must match evaluation_interval")
+    p.add_argument("--pre", type=int, default=600, help="seconds evaluated before incident start")
+    p.add_argument("--grace", type=int, default=300, help="seconds after end still counted as a detection")
+    p.add_argument("--report", default="reports/backtest.md")
+    p.add_argument("--fail-on-miss", action="store_true", help="exit 1 if any fault goes undetected (for CI)")
+    args = p.parse_args()
+
+    rules, incidents = load_rules(args.rules), load_incidents(args.incidents)
+    if args.source == "replay":
+        captured = [i for i in incidents
+                    if (pathlib.Path(args.incidents) / f"{i['id']}.parquet").exists()]
+        if len(captured) < len(incidents):
+            print(f"Skipping {len(incidents) - len(captured)} incident(s) with no Parquet capture "
+                  f"(run tools/capture.py).")
+        incidents = captured
+    faults = [i for i in incidents if i["type"] != "none"]
+    baselines = [i for i in incidents if i["type"] == "none"]
+    if not incidents:
+        print("No completed incidents found. Run tools/inject.py first.")
+        return 1
+
+    source = (ReplaySource(args.incidents) if args.source == "replay"
+              else PrometheusSource(args.prometheus))
+    with source:
+        summary, any_miss = backtest_rules(source, rules, faults, baselines, args)
 
     lines = ["| Rule | Detected | Median time to detect | False fires / hour |",
              "|---|---|---|---|"]

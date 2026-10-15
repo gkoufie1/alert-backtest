@@ -22,6 +22,7 @@ make latency       # 5 min at +800ms latency
 
 make backtest
 make capture       # persist incident windows to Parquet
+make replay        # same backtest from the Parquet library, no live Prometheus needed
 ```
 
 Example output:
@@ -48,20 +49,24 @@ check the engine's predictions against what Prometheus actually did under *Alert
    period after it ends. Firing during `none` (baseline) windows counts as a false fire.
 4. `tools/capture.py` saves raw samples around each incident to Parquet so the library
    outlives Prometheus retention.
+5. `--source replay` (`make replay`) renders the Parquet library as OpenMetrics, backfills
+   it with `promtool tsdb create-blocks-from openmetrics` into a throwaway
+   `prom/prometheus` container (same version as compose), and runs the same queries there
+   through the same `eval_ticks()` interface. The container is removed afterwards.
+   Incidents without a Parquet capture are skipped.
 
 ## Known limitations (deliberate, for now)
 
-- The engine queries the live Prometheus, so incidents must still be within retention
-  (30d). Next milestone: a `ReplaySource` that loads the Parquet library into a
-  throwaway Prometheus via `promtool tsdb create-blocks-from openmetrics`, behind the
-  same `eval_ticks()` interface.
+- The default `--source prometheus` needs incidents within retention (30d); use
+  `--source replay` for older ones. Replay only sees the metrics `tools/capture.py`
+  captures (`METRICS`), so rules over other metrics need that list extended first.
 - `keep_firing_for` and evaluation-time jitter are not modelled yet.
 - `--step` must equal Prometheus' `evaluation_interval` (15s).
 
 ## Roadmap
 
 - [x] Local loop: fault injection, ground truth, rule replay, scoring
-- [ ] Replay from the Parquet library (Prometheus-independent)
+- [x] Replay from the Parquet library (Prometheus-independent)
 - [ ] GitHub Action: backtest changed rules on every PR and comment results
 - [ ] Minikube + Chaos Mesh, MinIO as S3
 - [ ] EKS + S3 + AWS FIS weekend run, with cost breakdown
