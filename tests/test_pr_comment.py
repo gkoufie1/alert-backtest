@@ -25,9 +25,11 @@ def test_new_removed_and_missed_rules():
     text = render(head, result(rule("A"), rule("Old")), "lib")
     assert "| `B` (new) | 1/2 |" in text
     assert "~~`Old`~~ (removed)" in text
-    assert "**1 missed detection(s)**" in text and "- `B`: inc-1" in text
+    assert "**1 missed detection(s)**" in text
+    assert "- `B`: inc-1" in text
 
 
 def test_without_base_nothing_is_marked_new():
     text = render(result(rule("A")), None, "lib")
-    assert "(new)" not in text and "→" not in text
+    assert "(new)" not in text
+    assert "→" not in text
