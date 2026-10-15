@@ -1,0 +1,9 @@
+.venv/
+__pycache__/
+.pytest_cache/
+incidents/*.json
+incidents/*.parquet
+reports/*.md
+
+# original source archive
+files/

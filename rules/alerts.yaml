@@ -1,0 +1,21 @@
+groups:
+  - name: orders-slo
+    rules:
+      - alert: OrdersHighErrorRatio
+        expr: |
+          sum(rate(http_requests_total{route="/api/orders",code=~"5.."}[2m]))
+            /
+          sum(rate(http_requests_total{route="/api/orders"}[2m]))
+            > 0.05
+        for: 2m
+        labels:
+          severity: page
+
+      - alert: OrdersHighLatencyP99
+        expr: |
+          histogram_quantile(0.99,
+            sum by (le) (rate(http_request_duration_seconds_bucket{route="/api/orders"}[2m]))
+          ) > 0.5
+        for: 3m
+        labels:
+          severity: page
