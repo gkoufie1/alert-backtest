@@ -1,0 +1,11 @@
+{
+  "id": "20260901-000000-errors-20pct",
+  "type": "errors",
+  "params": {
+    "error_rate": 0.2
+  },
+  "start": 1756684804.2,
+  "end": 1756685104.2,
+  "status": "complete",
+  "synthetic": true
+}

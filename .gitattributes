@@ -1,0 +1,2 @@
+# the sample library is compared byte for byte with tools/synth_library.py output
+examples/incidents/** -text

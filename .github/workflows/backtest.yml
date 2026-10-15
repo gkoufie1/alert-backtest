@@ -1,0 +1,72 @@
+name: backtest
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+env:
+  LIBRARY: examples/incidents
+  PROMETHEUS_IMAGE: prom/prometheus:v2.53.0  # keep in step with docker-compose.yml
+
+jobs:
+  backtest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # the base branch's rules are read with git show
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - run: pip install -r requirements.txt
+
+      - name: Unit tests
+        run: python -m pytest -q
+
+      - name: promtool check rules
+        run: |
+          docker run --rm -v "$PWD/rules:/rules:ro" --entrypoint promtool "$PROMETHEUS_IMAGE" \
+            check rules /rules/alerts.yaml
+
+      - name: Backtest base branch rules
+        if: github.event_name == 'pull_request'
+        run: |
+          if git show "origin/${{ github.base_ref }}:rules/alerts.yaml" > "$RUNNER_TEMP/base-rules.yaml"; then
+            python -m engine.backtest --source replay --incidents "$LIBRARY" \
+              --rules "$RUNNER_TEMP/base-rules.yaml" \
+              --report "$RUNNER_TEMP/base.md" --json "$RUNNER_TEMP/base.json"
+          else
+            echo "No rules/alerts.yaml on ${{ github.base_ref }}, nothing to compare against."
+          fi
+
+      - name: Backtest this commit's rules
+        run: |
+          python -m engine.backtest --source replay --incidents "$LIBRARY" \
+            --report reports/backtest.md --json "$RUNNER_TEMP/head.json" --fail-on-miss
+
+      - name: Summarize
+        if: always() && hashFiles('reports/backtest.md') != ''
+        run: |
+          python -m tools.pr_comment --head "$RUNNER_TEMP/head.json" --base "$RUNNER_TEMP/base.json" \
+            --library "$LIBRARY" > "$RUNNER_TEMP/comment.md"
+          cat "$RUNNER_TEMP/comment.md" >> "$GITHUB_STEP_SUMMARY"
+
+      # PRs from forks get a read-only token, so they only get the job summary above
+      - name: Comment on the PR
+        if: >-
+          always() && github.event_name == 'pull_request' &&
+          github.event.pull_request.head.repo.full_name == github.repository &&
+          hashFiles('reports/backtest.md') != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh pr comment "${{ github.event.pull_request.number }}" \
+            --body-file "$RUNNER_TEMP/comment.md" --edit-last --create-if-none

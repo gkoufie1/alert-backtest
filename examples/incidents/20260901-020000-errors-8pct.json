@@ -1,0 +1,11 @@
+{
+  "id": "20260901-020000-errors-8pct",
+  "type": "errors",
+  "params": {
+    "error_rate": 0.08
+  },
+  "start": 1756692004.2,
+  "end": 1756692304.2,
+  "status": "complete",
+  "synthetic": true
+}
